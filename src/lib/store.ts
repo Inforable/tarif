@@ -178,6 +178,11 @@ export async function lock(name: string, ms: number): Promise<boolean> {
   return true;
 }
 
+/** True while this instance holds the named lock (for example a case being approved here). */
+export function holdsLock(name: string) {
+  return (st().locks.get(name) ?? 0) > 0;
+}
+
 export async function unlock(name: string) {
   const s = st();
   const held = s.locks.get(name) ?? 0;
