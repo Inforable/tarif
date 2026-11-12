@@ -18,13 +18,7 @@ export default function Playbook() {
   return (
     <div className="page fade-in max-w-[900px]">
       <h1 className="page-title">Playbook</h1>
-      <p className="page-sub">
-        What actually got clients to pay, per strategy and client segment. The verifier writes here only after PayPal confirms a payment or a payment
-        window runs out. The agent reads these rates through the get_playbook tool, and code checks that it copied them exactly.
-      </p>
-      <p className="text-[12px] muted mt-2">
-        Pay rate is (paid + 1) / (tries + 2), so small samples stay modest. Starting counts are synthetic seed data.
-      </p>
+      <p className="page-sub">What got clients to pay, by strategy and client type.</p>
 
       <div className="flex flex-col gap-4 mt-6">
         {segments.map((seg) => (

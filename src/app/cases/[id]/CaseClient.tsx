@@ -177,7 +177,7 @@ export default function CaseClient() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="section-title">Agent run</h2>
-                <p className="section-sub">Each tool call with the agent&apos;s reason, and each check code made.</p>
+                <p className="section-sub">Every tool call and every check.</p>
               </div>
               <button className="btn btn-sm btn-ghost shrink-0" onClick={() => setEverything((v) => !v)}>
                 {everything ? "Key steps" : `All ${c.trace.length}`}

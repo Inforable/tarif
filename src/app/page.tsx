@@ -34,7 +34,7 @@ export default function Overview() {
 
   return (
     <div className="page fade-in">
-      <PageHead title="Receivables" sub="Overdue PayPal invoices become cases. The agent plans, your policy decides, PayPal executes, and a case closes only when PayPal says the money arrived.">
+      <PageHead title="Receivables" sub="Overdue PayPal invoices become cases the agent works on.">
         <ModeTags mode={data.mode} engine={data.engine} />
       </PageHead>
 
@@ -99,7 +99,7 @@ export default function Overview() {
 
           <div className="dash-grid section">
           <section>
-            <SectionHead title="Collection cases" sub="One per overdue invoice. Open one to watch the agent work.">
+            <SectionHead title="Collection cases" sub="Tap one to watch the agent.">
               {openCases.length > 0 && (
                 <button
                   className="btn btn-accent btn-sm shrink-0"
@@ -209,7 +209,7 @@ export default function Overview() {
           </div>
 
           <section className="section">
-            <SectionHead title="Invoices in PayPal" sub="Live status from the PayPal Invoicing API." />
+            <SectionHead title="Invoices in PayPal" sub="Live from PayPal." />
             <div className="rows stagger">
               {data.invoices.map((i) => (
                 <div key={i.id} className="row">

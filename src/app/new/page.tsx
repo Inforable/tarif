@@ -58,10 +58,7 @@ export default function NewInvoice() {
   return (
     <div className="page fade-in max-w-[1000px]">
       <h1 className="page-title">Invoice from a chat</h1>
-      <p className="page-sub">
-        Paste the conversation where you agreed on the work. The AI drafts the invoice and leaves blank anything the chat does not say. You check it,
-        then it goes out through PayPal.
-      </p>
+      <p className="page-sub">Paste the chat. AI drafts the invoice, you send it through PayPal.</p>
 
       <div className="flex flex-col gap-4 mt-5">
         <section className="card pad">
