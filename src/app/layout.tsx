@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Hedvig_Letters_Serif } from "next/font/google";
 import { Suspense } from "react";
+import { Intro, INTRO_SCRIPT } from "@/components/Intro";
 import { Logo } from "@/components/Logo";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
@@ -16,8 +17,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${hedvig.variable} h-full`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${hedvig.variable} h-full`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: INTRO_SCRIPT }} />
+      </head>
       <body className="min-h-full">
+        <Intro />
         <div className="app-frame">
         <Suspense
           fallback={
