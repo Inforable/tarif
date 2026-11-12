@@ -431,6 +431,77 @@ export async function simulatePayment(invoiceId: string) {
   return sync();
 }
 
+/**
+ * Demo scenario: make one client's invoice overdue and play the whole case.
+ * Autopilot approves the recommended option and, with the simulator, pays the invoice,
+ * so every stage from overdue to PAID plays out on the case page.
+ */
+export async function runScenario(client: string, autopilot: boolean): Promise<string> {
+  const s = db();
+  const demo = DEMO_CLIENTS.find((d) => d.name === client);
+  if (!demo) throw new Error(`Unknown scenario ${client}`);
+  let inv = s.invoices.find((i) => i.clientName === client && !i.history && !i.replaces && outstanding(i) && !i.caseId);
+  if (!inv) {
+    const slug = client.toLowerCase().replace(/[^a-z]+/g, "");
+    inv = await createInvoice({
+      clientName: client,
+      clientEmail: `billing@${slug}.example.com`,
+      description: demo.description,
+      amount: demo.amount,
+      currency: "USD",
+      dueInDays: demo.dueInDays,
+    });
+  }
+  const today = isoDate(nowWith(s.clockOffsetDays));
+  const jump = Math.max(1, daysBetween(today, inv.dueDate) + 2);
+  mutate((st) => {
+    st.clockOffsetDays += jump;
+  });
+  const autoMode = s.settings.autonomy;
+  s.settings.autonomy = "always_ask"; // the scenario starts its own case below
+  await sync();
+  s.settings.autonomy = autoMode;
+  save();
+  const c = s.cases.find((x) => x.invoiceId === inv!.id);
+  if (!c) throw new Error("The case did not open");
+  void playCase(c.id, autopilot);
+  return c.id;
+}
+
+async function playCase(caseId: string, autopilot: boolean) {
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await pause(600); // let the page open before the agent starts
+  await startRun(caseId);
+  if (!autopilot) return;
+  running.add(caseId);
+  try {
+    let c = getCase(caseId);
+    if (c.status === "AWAITING_APPROVAL") {
+      await pause(1800);
+      emit(caseId, { kind: "human", actor: "person", title: "Demo autopilot approves the recommended option", detail: "In real use the owner reviews and approves here.", important: true });
+      c = getCase(caseId);
+      await approve(caseId, c.attempts[c.attempts.length - 1].plan!.recommended);
+    }
+    c = getCase(caseId);
+    if (c.status === "WAITING_PAYMENT" && simulator()) {
+      await pause(2500);
+      for (const id of c.activeInvoiceIds) {
+        const inv = db().invoices.find((i) => i.id === id);
+        if (inv && inv.status !== "PAID") {
+          emit(caseId, { kind: "human", actor: "client", title: `Client pays ${inv.number} (simulated)`, important: true });
+          simulator()!.pay(id);
+          await pause(900);
+        }
+      }
+      await sync();
+    }
+  } catch (e) {
+    emit(caseId, { kind: "error", actor: "code", title: "Autopilot stopped", detail: e instanceof Error ? e.message : String(e), important: true });
+  } finally {
+    running.delete(caseId);
+  }
+}
+
 export function reset() {
   running.clear();
   resetStore();
