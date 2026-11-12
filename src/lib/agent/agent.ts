@@ -5,8 +5,39 @@ import type { CollectionPlan } from "../types";
 import { READ_TOOLS, SUBMIT_PLAN, TOOL_LABEL, runReadTool } from "./tools";
 import { validatePlan, type ToolCallRecord } from "./validate";
 
-export const MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+import { db } from "../store";
+import { DEFAULT_MODEL } from "../models";
+
+/** The model picked in settings, else OPENAI_MODEL, else the default. */
+export function currentModel(): string {
+  return db().settings.model || process.env.OPENAI_MODEL || DEFAULT_MODEL;
+}
 export const hasModel = () => Boolean(process.env.OPENAI_API_KEY);
+
+const SWAP: Record<number, string> = {
+  0x2018: "'", 0x2019: "'", 0x201b: "'", 0x2032: "'",
+  0x201c: '"', 0x201d: '"', 0x2033: '"',
+  0x2013: "-", 0x2014: "-", 0x2212: "-",
+  0x2026: "...", 0x2192: "to", 0x21d2: "to",
+};
+
+/** Model text is shown in the app and emailed to clients: keep it plain ASCII. */
+export function plain(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 126)) out += ch;
+    else if (SWAP[code]) out += SWAP[code];
+  }
+  return out;
+}
+
+function plainDeep<T>(v: T): T {
+  if (typeof v === "string") return plain(v) as T;
+  if (Array.isArray(v)) return v.map(plainDeep) as T;
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plainDeep(x)])) as T;
+  return v;
+}
 
 const SYSTEM = `You are Tagih's collections agent. A small business or freelancer sent an invoice through PayPal and the client has not paid.
 Your job: find out why the client is late and propose how to collect, without damaging the relationship.
@@ -39,6 +70,7 @@ export interface AgentResult {
  */
 export async function runModelAgent(caseId: string): Promise<AgentResult> {
   const client = new OpenAI();
+  const MODEL = currentModel();
   const c = getCase(caseId);
   const attempt = c.attempts.length;
   const calls: ToolCallRecord[] = [];
@@ -72,7 +104,7 @@ export async function runModelAgent(caseId: string): Promise<AgentResult> {
     messages.push(msg);
 
     if (msg.content?.trim()) {
-      emit(caseId, { kind: "thought", actor: "agent", engine: MODEL, title: "Agent note", detail: msg.content.trim().slice(0, 600) });
+      emit(caseId, { kind: "thought", actor: "agent", engine: MODEL, title: "Agent note", detail: plain(msg.content.trim()).slice(0, 600) });
     }
 
     const toolCalls = (msg.tool_calls ?? []).filter((t) => t.type === "function");
@@ -94,7 +126,7 @@ export async function runModelAgent(caseId: string): Promise<AgentResult> {
       }
 
       if (name === "submit_plan") {
-        const { plan, problems } = validatePlan(args, calls);
+        const { plan, problems } = validatePlan(plainDeep(args), calls);
         if (plan && !problems.length) {
           accepted = plan;
           emit(caseId, {
@@ -125,7 +157,7 @@ export async function runModelAgent(caseId: string): Promise<AgentResult> {
       }
 
       const callId = `call_${calls.length + 1}`;
-      const why = typeof args.why === "string" ? args.why : "";
+      const why = typeof args.why === "string" ? plain(args.why) : "";
       try {
         const output = await runReadTool(getCase(caseId), name, args);
         calls.push({ callId, name, output });

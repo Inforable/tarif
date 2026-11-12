@@ -1,4 +1,4 @@
-import { runModelAgent, hasModel, MODEL } from "./agent/agent";
+import { runModelAgent, hasModel, currentModel } from "./agent/agent";
 import { rulePlan } from "./agent/rules";
 import { READ_TOOLS, TOOL_LABEL, runReadTool } from "./agent/tools";
 import type { ToolCallRecord } from "./agent/validate";
@@ -22,7 +22,7 @@ function demoNowIso() {
 }
 
 export function engineName() {
-  return hasModel() ? MODEL : "rules";
+  return hasModel() ? currentModel() : "rules";
 }
 
 /* ---------------- invoices ---------------- */
@@ -260,7 +260,7 @@ async function runCase(caseId: string) {
     kind: "phase",
     actor: "code",
     title: `Agent started (attempt ${c.attempts.length})`,
-    detail: hasModel() ? `Engine ${MODEL}. The model decides which tools to call.` : "No OPENAI_API_KEY set: the rule engine runs the same tools.",
+    detail: hasModel() ? `Engine ${currentModel()}. The model decides which tools to call.` : "No OPENAI_API_KEY set: the rule engine runs the same tools.",
     engine: engineName(),
     important: true,
   });

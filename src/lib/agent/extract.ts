@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { hasModel, MODEL } from "./agent";
+import { currentModel, hasModel, plain } from "./agent";
 
 // Chat or free text to invoice draft. Fields that are not in the text stay empty; a person confirms before PayPal.
 
@@ -35,6 +35,7 @@ export async function extractDraft(text: string): Promise<InvoiceDraft> {
   if (hasModel()) {
     try {
       const client = new OpenAI();
+      const MODEL = currentModel();
       const res = await client.chat.completions.create({
         model: MODEL,
         messages: [
@@ -48,7 +49,7 @@ export async function extractDraft(text: string): Promise<InvoiceDraft> {
         response_format: { type: "json_schema", json_schema: { name: "invoice_draft", strict: true, schema: SCHEMA } },
         ...(/^(gpt-5|o\d)/.test(MODEL) ? { reasoning_effort: "low" as const } : {}),
       });
-      const raw = JSON.parse(res.choices[0]?.message?.content || "{}");
+      const raw = JSON.parse(plain(res.choices[0]?.message?.content || "{}"));
       return { ...raw, currency: (raw.currency || "USD").toUpperCase(), engine: MODEL };
     } catch (e) {
       console.error("extract failed, using rules", e);
