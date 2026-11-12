@@ -155,6 +155,8 @@ export interface CollectionCase {
   trace: TraceEvent[];
   closedAt?: string;
   note?: string;
+  rev?: number; // write version in the shared store
+  busyUntil?: number; // ms timestamp while an agent run or autopilot works on the case (seen by every instance)
 }
 
 export interface PlaybookStat {
