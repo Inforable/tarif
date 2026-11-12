@@ -4,25 +4,32 @@ import { outstanding, payRate, profileFor } from "./clients";
 import { ACTION_LABEL } from "./library";
 import { paypal } from "./paypal";
 import { db } from "./store";
+import type { CollectionCase } from "./types";
 
 // JSON views for the UI. Kept in one place so pages stay presentational.
+
+// On Vercel the agent may be running on another serverless instance, so this instance's
+// in-memory "running" set does not know about it. The saved status is the shared truth.
+function live(c: CollectionCase) {
+  return isRunning(c.id) || (c.status === "RUNNING" && !!c.startedRunAt && Date.now() - c.startedRunAt < 5 * 60_000);
+}
 
 export function overviewView() {
   const s = db();
   const today = isoDate(nowWith(s.clockOffsetDays));
-  const live = s.invoices.filter((i) => !i.history);
-  const invoices = live
+  const live_ = s.invoices.filter((i) => !i.history);
+  const invoices = live_
     .map((i) => {
       const c = s.cases.find((x) => x.id === i.caseId);
       return {
         ...i,
         daysOverdue: outstanding(i) ? Math.max(0, daysBetween(i.dueDate, today)) : 0,
         caseStatus: c?.status ?? null,
-        running: c ? isRunning(c.id) : false,
+        running: c ? live(c) : false,
       };
     })
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1));
-  const open = live.filter(outstanding);
+  const open = live_.filter(outstanding);
   const overdue = open.filter((i) => daysBetween(i.dueDate, today) > 0);
   const collected = s.cases
     .filter((c) => c.status === "PAID")
@@ -34,7 +41,7 @@ export function overviewView() {
     return {
       id: c.id,
       status: c.status,
-      running: isRunning(c.id),
+      running: live(c),
       attempt: c.attempts.length,
       client: inv.clientName,
       number: inv.number,
@@ -103,7 +110,7 @@ export function caseView(id: string) {
     engine: engineName(),
     today,
     settings: s.settings,
-    running: isRunning(c.id),
+    running: live(c),
     case: c,
     invoice: { ...inv, daysOverdue: Math.max(0, daysBetween(inv.dueDate, today)) },
     active: c.activeInvoiceIds.map((x) => s.invoices.find((i) => i.id === x)).filter(Boolean),
