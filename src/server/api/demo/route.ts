@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       case "scenario":
         return ok({ caseId: await runScenario(String(b.client), b.autopilot !== false) });
       case "reset":
-        reset();
+        await reset();
         return ok();
       default:
         return fail(new Error(`Unknown action ${b.action}`));

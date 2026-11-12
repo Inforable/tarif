@@ -9,13 +9,27 @@ import { execute } from "./executor";
 import { paypal, demoRecipient, simulator } from "./paypal";
 import { evaluatePolicy } from "./policy";
 import { DEMO_CLIENTS } from "./seed";
-import { db, mutate, nextId, resetStore, save } from "./store";
+import { db, hydrate, lock, mutate, nextId, resetStore, save, setLocalOwnership, unlock } from "./store";
 import { emit, getCase, setPhase } from "./trace";
 import type { CollectionCase, Invoice, PlanOption } from "./types";
 
 // Orchestration: signal, agent, validation, policy, (approval), executor, verifier, playbook.
 
 const running = new Set<string>();
+// While this instance runs an agent on a case, its in-memory copy is the authoritative one.
+setLocalOwnership((id) => running.has(id), () => running.clear());
+
+const CASE_LOCK_MS = 300_000;
+const caseLock = (id: string) => `case:${id}`;
+
+/** Marks a case busy for every instance (the case page polls fast and shows "Agent working"). */
+function markBusy(caseId: string, on: boolean) {
+  const c = db().cases.find((x) => x.id === caseId);
+  if (!c) return;
+  if (on) c.busyUntil = Date.now() + CASE_LOCK_MS;
+  else delete c.busyUntil;
+  save();
+}
 
 // Work that must outlive the HTTP response (agent runs). Routes hand these to next/server after(),
 // so serverless hosts such as Vercel keep the function alive until they finish.
@@ -102,7 +116,7 @@ export async function createDemoInvoices() {
 /* ---------------- sync: PayPal status, overdue signal, verifier ---------------- */
 
 export async function sync(): Promise<{ opened: string[]; paid: string[]; reopened: string[] }> {
-  const s = db();
+  let s = db();
   const pp = paypal();
   const demoToday = isoDate(nowWith(s.clockOffsetDays));
   const opened: string[] = [];
@@ -123,11 +137,15 @@ export async function sync(): Promise<{ opened: string[]; paid: string[]; reopen
   pp.drainCalls();
   save();
 
-  // 2. Overdue signal: one case per invoice.
-  for (const inv of s.invoices) {
+  // 2. Overdue signal: one case per invoice. Locked so two instances never open the same case twice.
+  if (await lock("signal", 30_000)) {
+    try {
+      await hydrate();
+      s = db();
+      for (const inv of s.invoices) {
     if (inv.history || inv.caseId || inv.replaces || !outstanding(inv)) continue;
     if (daysBetween(inv.dueDate, demoToday) <= 0) continue;
-    const id = nextId("CASE");
+    const id = await nextId("CASE");
     const c: CollectionCase = {
       id,
       invoiceId: inv.id,
@@ -149,10 +167,16 @@ export async function sync(): Promise<{ opened: string[]; paid: string[]; reopen
       important: true,
     });
     opened.push(id);
+      }
+    } finally {
+      await unlock("signal");
+    }
   }
 
-  // 3. Verifier for cases waiting on payment.
+  // 3. Verifier for cases waiting on payment. Skips cases another instance is working on.
   for (const c of s.cases.filter((x) => x.status === "WAITING_PAYMENT")) {
+    if (!(await lock(caseLock(c.id), 60_000))) continue;
+    try {
     const active = c.activeInvoiceIds.map((id) => s.invoices.find((i) => i.id === id)!).filter(Boolean);
     const attempt = c.attempts[c.attempts.length - 1];
     const option = attempt.plan && attempt.chosen !== undefined ? attempt.plan.options[attempt.chosen] : undefined;
@@ -209,6 +233,9 @@ export async function sync(): Promise<{ opened: string[]; paid: string[]; reopen
         reopened.push(c.id);
       }
     }
+    } finally {
+      await unlock(caseLock(c.id));
+    }
   }
 
   // Autonomy: in policy-based mode new and reopened cases start on their own.
@@ -236,23 +263,31 @@ function learn(action: PlanOption["action"], segment: string, success: boolean, 
 /* ---------------- agent run ---------------- */
 
 export function isRunning(id: string) {
-  return running.has(id);
+  if (running.has(id)) return true;
+  const c = db().cases.find((x) => x.id === id);
+  return Boolean(c?.busyUntil && c.busyUntil > Date.now());
 }
 
 /** Starts the agent in the background. The case page polls the trace while it runs. */
 export async function startRun(caseId: string) {
   const c = getCase(caseId);
-  if (running.has(caseId) || !["OPEN", "ERROR", "BLOCKED"].includes(c.status)) return;
+  if ((isRunning(caseId) && !running.has(caseId)) || !["OPEN", "ERROR", "BLOCKED"].includes(c.status)) return;
+  if (!(await lock(caseLock(caseId), CASE_LOCK_MS))) return;
   running.add(caseId);
+  markBusy(caseId, true);
   try {
     await runCase(caseId);
   } catch (e) {
-    const cc = getCase(caseId);
-    cc.status = "ERROR";
-    save();
-    emit(caseId, { kind: "error", actor: "code", title: "Run stopped", detail: e instanceof Error ? e.message : String(e), important: true });
+    const cc = db().cases.find((x) => x.id === caseId);
+    if (cc) {
+      cc.status = "ERROR";
+      save();
+      emit(caseId, { kind: "error", actor: "code", title: "Run stopped", detail: e instanceof Error ? e.message : String(e), important: true });
+    }
   } finally {
     running.delete(caseId);
+    markBusy(caseId, false);
+    await unlock(caseLock(caseId));
   }
 }
 
@@ -387,6 +422,15 @@ async function decide(caseId: string, optionIndex: number) {
 /* ---------------- human decisions ---------------- */
 
 export async function approve(caseId: string, optionIndex: number, edits?: { subject?: string; message?: string }) {
+  if (!(await lock(caseLock(caseId), 60_000))) throw new Error("Another step is working on this case. Try again in a moment.");
+  try {
+    await approveLocked(caseId, optionIndex, edits);
+  } finally {
+    await unlock(caseLock(caseId));
+  }
+}
+
+async function approveLocked(caseId: string, optionIndex: number, edits?: { subject?: string; message?: string }) {
   const c = getCase(caseId);
   if (c.status !== "AWAITING_APPROVAL") throw new Error("This case is not waiting for approval");
   const attempt = c.attempts[c.attempts.length - 1];
@@ -481,10 +525,15 @@ export async function runScenario(client: string, autopilot: boolean): Promise<s
 async function playCase(caseId: string, autopilot: boolean) {
   const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
   await pause(600); // let the page open before the agent starts
-  await startRun(caseId);
-  if (!autopilot) return;
-  running.add(caseId);
+  if (!autopilot) {
+    await startRun(caseId);
+    return;
+  }
+  if (!(await lock(caseLock(caseId), CASE_LOCK_MS))) return;
   try {
+    await startRun(caseId);
+    running.add(caseId);
+    markBusy(caseId, true);
     let c = getCase(caseId);
     if (c.status === "AWAITING_APPROVAL") {
       await pause(1800);
@@ -509,12 +558,14 @@ async function playCase(caseId: string, autopilot: boolean) {
     emit(caseId, { kind: "error", actor: "code", title: "Autopilot stopped", detail: e instanceof Error ? e.message : String(e), important: true });
   } finally {
     running.delete(caseId);
+    markBusy(caseId, false);
+    await unlock(caseLock(caseId));
   }
 }
 
-export function reset() {
+export async function reset() {
   running.clear();
-  resetStore();
+  await resetStore();
 }
 
 export function setAutonomy(mode: "always_ask" | "policy_based") {

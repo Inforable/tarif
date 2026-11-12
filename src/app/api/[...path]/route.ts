@@ -1,4 +1,5 @@
 import { fail } from "@/lib/http";
+import { hydrate, settle } from "@/lib/store";
 import * as caseGet from "@/server/api/cases/[id]/route";
 import * as caseApprove from "@/server/api/cases/[id]/approve/route";
 import * as caseDismiss from "@/server/api/cases/[id]/dismiss/route";
@@ -37,7 +38,14 @@ async function handle(method: string, req: Request, ctx: Ctx) {
   const { path } = await ctx.params;
   const { handler, id } = route(method, path);
   if (!handler) return fail(new Error(`No route for ${method} /api/${path.join("/")}`), 404);
-  return handler(req, { params: Promise.resolve({ id: id ?? "" }) });
+  try {
+    await hydrate(); // read the shared state written by any instance
+  } catch (e) {
+    return fail(e, 503);
+  }
+  const res = await handler(req, { params: Promise.resolve({ id: id ?? "" }) });
+  await settle(); // our writes are visible to every instance before the client asks again
+  return res;
 }
 
 export function GET(req: Request, ctx: Ctx) {

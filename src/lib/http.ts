@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { takeBackground } from "./cases";
+import { settle } from "./store";
 
 /** Keep the function alive for agent runs started during this request. */
 export function keepAlive() {
@@ -9,6 +10,7 @@ export function keepAlive() {
       await Promise.all(batch);
       batch = takeBackground();
     }
+    await settle();
   });
 }
 

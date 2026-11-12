@@ -1,4 +1,4 @@
-import { db, save } from "../store";
+import { db, nextSeq, save } from "../store";
 import type { CreateInvoiceInput, PayPalCall, PayPalGateway, RemoteInvoice } from "./types";
 
 // Stand-in for PayPal when no sandbox credentials are configured. Same interface as PayPalRest,
@@ -23,8 +23,8 @@ export class PayPalSimulated implements PayPalGateway {
   }
 
   async createAndSend(input: CreateInvoiceInput): Promise<RemoteInvoice> {
+    const n = await nextSeq("TG");
     const s = db();
-    const n = Object.keys(s.sim).length + 1;
     const id = `SIM2-${Date.now().toString(36).toUpperCase()}-${n}`;
     this.log("POST", "/v2/invoicing/invoices", 201);
     this.log("POST", `/v2/invoicing/invoices/${id}/send`);
