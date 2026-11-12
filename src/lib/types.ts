@@ -145,6 +145,8 @@ export interface Attempt {
 export interface CollectionCase {
   id: string;
   invoiceId: string;
+  /** Invoices that must be paid to close the case (the original, or its reissue / installments). */
+  activeInvoiceIds: string[];
   status: CaseStatus;
   phase: number; // 0..5 for the live stepper
   openedAt: string; // demo clock ISO
@@ -170,6 +172,7 @@ export interface Settings {
   reminderCooldownDays: number;
   paymentWindowDays: number; // how long the verifier waits before reopening
   businessName: string;
+  model?: string; // OpenAI model the agent uses
 }
 
 export interface StoreShape {

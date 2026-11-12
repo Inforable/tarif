@@ -18,7 +18,7 @@ export interface DemoClient {
 export const DEMO_CLIENTS: DemoClient[] = [
   {
     name: "Studio Rimba",
-    description: "Brand identity refresh — logo system and guidelines",
+    description: "Brand identity refresh: logo system and guidelines",
     amount: 420,
     dueInDays: 3,
     past: [
