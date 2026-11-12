@@ -1,7 +1,10 @@
 import { approve } from "@/lib/cases";
-import { body, fail, ok, type IdParams } from "@/lib/http";
+import { body, fail, ok, type IdParams, keepAlive } from "@/lib/http";
+
+export const maxDuration = 300;
 
 export async function POST(req: Request, { params }: IdParams) {
+  keepAlive();
   const { id } = await params;
   const b = await body<{ option: number; subject?: string; message?: string }>(req);
   try {

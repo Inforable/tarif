@@ -1,8 +1,11 @@
 import { advanceClock, createDemoInvoices, reset, runScenario, simulatePayment, sync } from "@/lib/cases";
-import { body, fail, ok } from "@/lib/http";
+import { body, fail, ok, keepAlive } from "@/lib/http";
+
+export const maxDuration = 300;
 
 // Demo controls. Disabled when TAGIH_DEMO_CONTROLS=off.
 export async function POST(req: Request) {
+  keepAlive();
   if (process.env.TAGIH_DEMO_CONTROLS === "off") return fail(new Error("Demo controls are off"), 403);
   const b = await body<{ action: string; days?: number; invoiceId?: string; client?: string; autopilot?: boolean }>(req);
   try {

@@ -17,6 +17,16 @@ import type { CollectionCase, Invoice, PlanOption } from "./types";
 
 const running = new Set<string>();
 
+// Work that must outlive the HTTP response (agent runs). Routes hand these to next/server after(),
+// so serverless hosts such as Vercel keep the function alive until they finish.
+const pending: Promise<unknown>[] = [];
+export function background(p: Promise<unknown>) {
+  pending.push(p.catch(() => {}));
+}
+export function takeBackground() {
+  return pending.splice(0);
+}
+
 function demoNowIso() {
   return nowWith(db().clockOffsetDays).toISOString();
 }
@@ -203,7 +213,7 @@ export async function sync(): Promise<{ opened: string[]; paid: string[]; reopen
 
   // Autonomy: in policy-based mode new and reopened cases start on their own.
   if (s.settings.autonomy === "policy_based") {
-    for (const id of [...opened, ...reopened]) void startRun(id);
+    for (const id of [...opened, ...reopened]) background(startRun(id));
   }
   return { opened, paid, reopened };
 }
@@ -464,7 +474,7 @@ export async function runScenario(client: string, autopilot: boolean): Promise<s
   save();
   const c = s.cases.find((x) => x.invoiceId === inv!.id);
   if (!c) throw new Error("The case did not open");
-  void playCase(c.id, autopilot);
+  background(playCase(c.id, autopilot));
   return c.id;
 }
 

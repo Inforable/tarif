@@ -6,7 +6,8 @@ import { seedStore } from "./seed";
 // A small JSON-file store. Good enough for a single-instance demo (Render web service).
 // Writes are synchronous so a background agent run and a request never interleave mid-write.
 
-const DATA_DIR = process.env.TAGIH_DATA_DIR || path.join(process.cwd(), ".data");
+// Vercel and other serverless hosts only allow writes under /tmp.
+const DATA_DIR = process.env.TAGIH_DATA_DIR || (process.env.VERCEL ? "/tmp/tagih" : path.join(process.cwd(), ".data"));
 const FILE = path.join(DATA_DIR, "store.json");
 const VERSION = 3;
 
