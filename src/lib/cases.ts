@@ -9,18 +9,20 @@ import { execute } from "./executor";
 import { paypal, demoRecipient, simulator } from "./paypal";
 import { evaluatePolicy } from "./policy";
 import { DEMO_CLIENTS } from "./seed";
-import { db, hydrate, lock, mutate, nextId, resetStore, save, setLocalOwnership, unlock } from "./store";
+import { db, holdsLock, hydrate, lock, mutate, nextId, resetStore, save, setLocalOwnership, unlock } from "./store";
 import { emit, getCase, setPhase } from "./trace";
 import type { CollectionCase, Invoice, PlanOption } from "./types";
 
 // Orchestration: signal, agent, validation, policy, (approval), executor, verifier, playbook.
 
 const running = new Set<string>();
-// While this instance runs an agent on a case, its in-memory copy is the authoritative one.
-setLocalOwnership((id) => running.has(id), () => running.clear());
-
+// While this instance runs an agent on a case, or holds its lock (an approval or the verifier is
+// executing here), its in-memory copy is the authoritative one. Without the lock check, a page poll
+// on the same instance during an approval reloads the case from Redis and replaces the attempt
+// object the executor is still writing to, so executedAt, decidedBy and new installments are lost.
 const CASE_LOCK_MS = 300_000;
 const caseLock = (id: string) => `case:${id}`;
+setLocalOwnership((id) => running.has(id) || holdsLock(caseLock(id)), () => running.clear());
 
 /** Marks a case busy for every instance (the case page polls fast and shows "Agent working"). */
 function markBusy(caseId: string, on: boolean) {
