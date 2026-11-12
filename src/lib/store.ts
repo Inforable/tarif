@@ -340,6 +340,9 @@ export async function hydrate() {
     return;
   }
   const s = st();
+  // Write out anything changed locally but not saved yet (an operation in flight in this instance),
+  // otherwise loading from Redis would replace it and lose it.
+  if (s.data) s.chain = s.chain.then(flush).catch((e) => console.error("[store] flush failed", e));
   await s.chain;
 
   let epoch = await r.get<string>(K.epoch);
