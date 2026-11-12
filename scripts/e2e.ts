@@ -9,6 +9,8 @@ process.env.TAGIH_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tagih-e2e-")
 delete process.env.PAYPAL_CLIENT_ID;
 delete process.env.PAYPAL_CLIENT_SECRET;
 if (!process.env.E2E_USE_MODEL) delete process.env.OPENAI_API_KEY;
+// always the file store, never a shared Redis
+for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) delete process.env[k];
 
 let failures = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -20,7 +22,7 @@ async function main() {
   const cases = await import("../src/lib/cases");
   const { db } = await import("../src/lib/store");
 
-  cases.reset();
+  await cases.reset();
   await cases.createDemoInvoices();
   const open = db().invoices.filter((i) => !i.history);
   check("4 demo invoices created and SENT", open.length === 4 && open.every((i) => i.status === "SENT"));
@@ -81,7 +83,7 @@ async function main() {
   check("playbook updated", learned > 0);
 
   // Policy-based autonomy: a reliable client, small amount, plain reminder runs without a person.
-  cases.reset();
+  await cases.reset();
   cases.setAutonomy("policy_based");
   await cases.createDemoInvoices();
   r = await cases.advanceClock(7);
