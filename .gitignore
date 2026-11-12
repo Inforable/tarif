@@ -43,3 +43,6 @@ next-env.d.ts
 # tagih runtime data
 .data/
 
+
+# local docs (not published)
+docs/
