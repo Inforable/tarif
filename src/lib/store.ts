@@ -321,8 +321,15 @@ function replaceInPlace<T extends object>(target: T, source: T) {
   Object.assign(target, source);
 }
 
-function parseHash<T>(h: Record<string, unknown> | null): Array<[string, string, T]> {
-  return Object.entries(h ?? {}).map(([id, v]) => [id, String(v), JSON.parse(String(v)) as T]);
+/** HGETALL without automatic deserialization comes back as a flat [field, value, ...] array. */
+function parseHash<T>(h: Record<string, unknown> | unknown[] | null): Array<[string, string, T]> {
+  const pairs: Array<[string, unknown]> = [];
+  if (Array.isArray(h)) for (let i = 0; i + 1 < h.length; i += 2) pairs.push([String(h[i]), h[i + 1]]);
+  else for (const [k, v] of Object.entries(h ?? {})) pairs.push([k, v]);
+  return pairs.map(([id, v]) => {
+    const raw = typeof v === "string" ? v : JSON.stringify(v);
+    return [id, raw, JSON.parse(raw) as T];
+  });
 }
 
 /** Load the shared state. Objects that already exist locally are updated in place. */
