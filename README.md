@@ -52,8 +52,9 @@ Fill in `.env.local`:
 | `OPENAI_API_KEY` | platform.openai.com, API keys |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | developer.paypal.com, Apps & Credentials, Sandbox, Create App |
 | `PAYPAL_DEMO_RECIPIENT` | developer.paypal.com, Testing Tools, Sandbox Accounts: the email of the Personal (buyer) account |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | console.upstash.com, create a Redis database, REST API section. Only needed when the app runs on more than one instance (Vercel). `KV_REST_API_URL` and `KV_REST_API_TOKEN` from the Vercel integration also work |
 
-Every key is optional. Without PayPal credentials the app uses a PayPal simulator, and without an OpenAI key a rule engine plans instead. Both are labelled in the app.
+Every key is optional. Without PayPal credentials the app uses a PayPal simulator, and without an OpenAI key a rule engine plans instead. Both are labelled in the app. Without Upstash Redis, state is kept in a local JSON file.
 
 ## Run
 
@@ -86,9 +87,17 @@ npm run e2e
 6. Press **+5 days** on an unpaid case to see it reopen and the agent escalate.
 7. Switch on **Agent autonomy** on Receivables and run a new case: a small reminder goes out without you.
 
+## Deploy on Vercel
+
+1. Import the repository in Vercel (framework preset: Next.js, already set in `vercel.json`).
+2. In the project, open **Storage**, create **Upstash for Redis** (free plan) and connect it to the project. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+3. Add `OPENAI_API_KEY`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_DEMO_RECIPIENT` under Environment Variables, then redeploy.
+
+Vercel runs several instances, so the shared Redis store is required there: every instance reads and writes the same invoices, cases, agent traces, settings, demo clock and playbook. Reset in Demo control clears the shared store for everyone.
+
 ## Deploy on Render
 
-The repository includes `render.yaml`. Create a new Blueprint on Render from this repository and set the environment variables above. Demo data is stored in a JSON file inside the service and resets when the service restarts.
+The repository also includes `render.yaml` for a single long-running server. Create a Blueprint from the repository and set the environment variables above. Upstash is optional there.
 
 ## License
 
